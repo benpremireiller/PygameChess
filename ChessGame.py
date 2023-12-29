@@ -64,7 +64,7 @@ class ChessVar:
         This dict makes working with checking if spaces are occupied by pieces easier
         """
 
-        # Loop through the board and add all pieces to the appropriate
+        # Loop through the board and add all pieces to the piece position dictionary
         for i, row in enumerate(self._board):
             for j, cell in enumerate(row):
                 if cell is not None:  # A piece
@@ -73,7 +73,7 @@ class ChessVar:
 
     def get_piece_positions(self, piece_name: str, color: str) -> list:
         """
-        Return the positions of the pieces for the provided color
+        Return the positions of the pieces for the piece_name with the provided color
         """
 
         positions = []
@@ -87,7 +87,7 @@ class ChessVar:
 
     def position_is_on_board(self, position: tuple) -> bool:
         """
-        Helper method which returns True if the position passed is on the board.
+        Static helper method which returns True if the position passed is on the board.
         Takes the form (row, col) as a tuple
         """
 
@@ -228,7 +228,7 @@ class ChessVar:
         """
         Move the piece at the from_position by using the data in the to_move
         The to_move argument contains a list with a to_position and a remove_position which indicate the position the piece
-        should move to and the position from which the opponent piece should be removed, respectively.
+        should move to and the position which the opponent piece should be removed from, respectively.
         """
 
         opponent_color = self.get_other_color(moving_color)
@@ -250,24 +250,24 @@ class ChessVar:
             self._piece_positions_dict[opponent_color].remove(remove_position)
 
         # Move the piece to the new position
-        self._piece_positions_dict[moving_color].remove(from_position)
-        self._piece_positions_dict[moving_color].append(to_position)
-
         self._board[from_row][from_col] = None
         self._board[to_row][to_col] = from_piece
 
-        # Convert to list incase we need to add a move (for knighting)
-        from_position, to_position, from_piece = [from_position], [to_position], [from_piece]
+        self._piece_positions_dict[moving_color].remove(from_position)
+        self._piece_positions_dict[moving_color].append(to_position)
 
         # Check for queening piece
         if isinstance(from_piece, Pawn) and from_piece.get_end_row() == to_row: # Pawn has reached the end
             self.add_queen_at_position(to_row, to_col, moving_color)
 
-        # Check for castling
+        # Convert to lists incase we need to add a move (for knighting)
+        from_position, to_position, from_piece = [from_position], [to_position], [from_piece]
+
+        # Check if the move is a castling move
         col_distance = to_col - from_col
         if isinstance(from_piece[0], King) and abs(col_distance) > 1: # Kings will only move at least two spaces if castling
 
-            # Get the rooks position
+            # Get the rooks from and to positions
             orientation = (col_distance > 0) - (col_distance < 0) # 1 is right, -1 is left
             rook_col = 7 if orientation == 1 else 0 # If king moving right, then rook at far right (col index 7) and vice versa
 
@@ -279,7 +279,7 @@ class ChessVar:
             # Recurse this method to move the rook
             self.update_board_positions(rook_from_position, rook_move, moving_color)
 
-            # Overwrite the last move variables to include the rook
+            # Append the rook move to the lists we will use to update the last move
             from_position.append(rook_from_position)
             to_position.append(rook_to_position)
             from_piece.append(rook_piece)
@@ -293,7 +293,7 @@ class ChessVar:
         }
 
     def revert_last_move(self) -> None:
-        """Revert the board and position dict to their state before the last move that occurred"""
+        """Revert the board list and position dict to their state right before the last move that occurred"""
 
         moves_from, moves_to, moving_pieces, captured_piece = self._last_move.values()
 
@@ -303,21 +303,32 @@ class ChessVar:
             from_row, from_col = move_from
             to_row, to_col = move_to
 
+            # Move the pieces back to their move_from positions on the board and the position dict
             self._board[from_row][from_col] = self._board[to_row][to_col]
-            self._board[to_row][to_col] = captured_piece
-
-            if captured_piece is not None: # This can't happen for knighting
-                captured_color = captured_piece.get_color()
-                self._piece_positions_dict[captured_color].append(move_to)
+            self._board[to_row][to_col] = captured_piece # This will be None if the move wasn't a capture
 
             self._piece_positions_dict[moving_piece.get_color()].remove(move_to)
             self._piece_positions_dict[moving_piece.get_color()].append(move_from)
 
-    def get_available_moves(self, piece, from_row: int, from_col: int):
-        """Return a list of coordinates with all available moves for a specific piece based on their individual rules"""
+            # If the move was a capture, return the piece to the board
+            if captured_piece is not None: # This can't happen for knighting
+                captured_color = captured_piece.get_color()
+                self._piece_positions_dict[captured_color].append(move_to)
 
-        # We will fill these lists with the available moves for the piece. We need a remove from positions because it may be different from
-        # the move_to_positions for en passant captures (pawns)
+
+
+    def get_available_moves(self, piece, from_row: int, from_col: int):
+        """
+        Get the available moves for a particular piece on the board.
+        This method will fetch the available moves for the inputted piece based on its allowed movement rules
+
+        Returns a tuple with two elements. The first element is a list of legal 'move to' positions and the
+        second element is a list of 'remove from' positions which correspond to the positions we need to remove opponent
+        pieces from for each 'move to' move. The reason we need a remove from position is it may be different from
+        the move_to_positions for en passant captures (pawns). If the move is not a capture, the 'remove from' value will be None.
+        """
+
+        # We will fill these lists with the available moves for the piece
         move_to_positions = []
         remove_from_positions = []
 
@@ -325,13 +336,14 @@ class ChessVar:
         allowed_distance = piece.get_max_allowed_distance()
         allowed_move_orientations = piece.get_allowed_moved_orientations()
 
-        # Get color of moving piece and opponent for use later
+        # Get color of the moving piece and opponent for use later
         player_color = piece.get_color()
         opponent_color = self.get_other_color(player_color)
 
         if isinstance(piece, Knight):  # Knights move in L shape, so we need to handle separately
 
             def add_knight_move(position_to_check: tuple) -> None:
+                """Add valid moves based on what is present at the position_to_check"""
 
                 position_on_board = self.position_is_on_board(position_to_check)
                 position_not_players_piece = position_to_check not in self._piece_positions_dict[player_color]
@@ -357,7 +369,7 @@ class ChessVar:
 
         elif isinstance(piece, Pawn):  # Pawns move only in one direction and capture diagonally (including en passant)
 
-            direction = allowed_move_orientations[0][0]  # The vertical direction
+            direction = allowed_move_orientations[0][0]  # The vertical direction (1 or -1)
 
             # Get regular moves
             dist = 1
@@ -397,11 +409,12 @@ class ChessVar:
 
         else:  # All other pieces move in straight lines
 
-            # Loop through all possible directions a piece can go
+            # Loop through all allowed directions a piece can go
             for orientation in allowed_move_orientations:
 
-                vertical_direction, horizontal_direction = orientation  # list unpack
+                vertical_direction, horizontal_direction = orientation
 
+                # Get the first position that will be checked for legality
                 position_offset = (from_row + vertical_direction, from_col + horizontal_direction)
                 position_offset_on_board = self.position_is_on_board(position_offset)
                 dist = 1
@@ -424,18 +437,22 @@ class ChessVar:
                     remove_from_positions.append(None)
 
                     dist += 1
+
+                    # Advance the position offset by one cell in the direction we are checking
                     position_offset = (from_row + (vertical_direction * dist), from_col + (horizontal_direction * dist))
                     position_offset_on_board = self.position_is_on_board(position_offset)
 
-            # Add castling for kings
+            # Add castling for kings. Kings can only castle if they haven't already moved.
             if isinstance(piece, King) and not piece.get_already_moved():
 
                 rook_positions = self.get_piece_positions('Rook', player_color)
 
+                # Check if the rook can castle
                 for rook_position in rook_positions:
                     rook_row, rook_col = rook_position
                     rook_piece = self._board[rook_row][rook_col]
 
+                    # If the rook has already moved, castling in not legal
                     if rook_piece.get_already_moved():
                         continue
 
@@ -444,7 +461,7 @@ class ChessVar:
                     # Get orientation to determine queen side or king side castling
                     orientation = (col_difference > 0) - (col_difference < 0)  # -1 is left (queen side), 1 is right (king side)
 
-                    # Make sure the path is clear between the king and rook
+                    # Check if the path is clear between the king and rook
                     path_is_clear = True
                     offset = 1
                     while offset < abs(col_difference):
@@ -454,6 +471,7 @@ class ChessVar:
                             break
                         offset += 1
 
+                    # If the path is clear, the king hasn't moved and the rook hasn't moved, castling is legal
                     if path_is_clear:
                         king_move_to = (from_row, from_col + ((offset - 1) * orientation))
                         move_to_positions.append(king_move_to)
@@ -462,28 +480,36 @@ class ChessVar:
         return move_to_positions, remove_from_positions
 
     def check_for_check(self, color: str) -> bool:
-        """Return if the kings position is in the set of available moves of the opponent's pieces"""
+        """Return if the kings position is in the set of available moves of the 'color' opponent's pieces"""
 
+        # Get the 'color' player
+        players_king_position, = self.get_piece_positions('King', color)  # Only one value will be returned so unpack
+
+        # Create a set we will fill with the opponents moves
         opponent_color = self.get_other_color(color)
-
-        opponent_moves = set()
         opponent_piece_positions = self._piece_positions_dict[opponent_color]
 
+        # Get the distinct set of moves that the opponent pieces can make
         for opponent_position in opponent_piece_positions:
             row, col = opponent_position
             piece = self._board[row][col]
             to_positions, _ = self.get_available_moves(piece, row, col)
-            opponent_moves = opponent_moves | set(to_positions)
 
-        players_king_position, = self.get_piece_positions('King', color)  # Only one value will be returned so unpack
+            # If the players king position is in the set of available moves for any opponent piece, the king is in check
+            if players_king_position in to_positions:
+                return True
 
-        if players_king_position in opponent_moves:
-            return True
-
+        # If we've reached here, the opponent does not have a move at the active player's king position
         return False
 
     def check_for_mate(self) -> bool:
-        """Returns true if the opponent player is mated and false otherwise"""
+        """
+        Returns true if the opponent (non-active) player is mated and false otherwise
+        This method checks if a move that the opponents pieces can make results in the king still being in check
+
+        The opponent could move their king, capture a piece that has the king in check or move a piece in front of
+        a piece that has the king in check. This method checks every possible move for simplicity.
+        """
 
         # Check if the non-active player's (opponent) king is currently in check
         king_in_check = self.check_for_check(self._opponent_player)
@@ -492,35 +518,39 @@ class ChessVar:
 
         actual_last_move = self._last_move
 
-        # Check if a move that the opponents pieces can make results in the king still being in check
+        # Get the opponent's piece positions then loop through them
         opponent_piece_positions = list(self._piece_positions_dict[self._opponent_player])
 
-        # The opponent could move the king, capture a piece that has the king in check or move a piece in front of
-        # a piece that has the king in check. This checks every possible move for simplicity.
         for opponent_position in opponent_piece_positions:
 
             row, col = opponent_position
             piece = self._board[row][col]
+
+            # Get the available moves for the piece
             to_positions, remove_positions = self.get_available_moves(piece, row, col)
 
             for move in zip(to_positions, remove_positions):
 
-                self.update_board_positions(opponent_position, move, self._opponent_player)  # Move the piece
+                # Update the board for the available 'test' move
+                self.update_board_positions(opponent_position, move, self._opponent_player)
 
+                # Check if the king is in check
                 king_in_check = self.check_for_check(self._opponent_player)
 
-                self.revert_last_move()  # Move it back
+                # Revert the move since we were just testing
+                self.revert_last_move()
 
-                if not king_in_check:  # If there is a single move which results in the king not being in check
+                # If there is a single move which results in the king not being in check then it is not checkmate
+                if not king_in_check:
                     self._last_move = actual_last_move
                     return False
 
-        # If we've reached here then the opponent is mated
+        # If we've reached here then the opponent has no moves to 'un-check' themselves and is thus mated
         self._last_move = actual_last_move
         return True
 
     def add_queen_at_position(self, row: int, col: int, color: str) -> None:
-        """Set the position passed as a queen of the passed color"""
+        """Add a queen of the color passed at the position passed to the board list"""
 
         self._board[row][col] = Queen(color)
 
@@ -539,18 +569,22 @@ class ChessPiece:
         self._allowed_move_orientations = []
 
     def get_max_allowed_distance(self) -> int:
+        """Return the max allowed distance"""
 
         return self._max_allowed_distance
 
     def get_allowed_moved_orientations(self) -> list:
+        """Return the allowed movement orientations"""
 
         return self._allowed_move_orientations
 
     def get_already_moved(self) -> bool:
+        """Return if the piece has already moved"""
 
         return self._already_moved
 
     def update_has_already_moved(self) -> None:
+        """Update that the piece has already moved"""
 
         self._already_moved = True
 
@@ -573,7 +607,7 @@ class ChessPiece:
         return self.__class__.__name__
 
     def __str__(self):
-        """Override the string dunder method to print a more friendly output"""
+        """Override the string dunder method to print a more visually friendly output"""
 
         return self._color + ' ' + self.__class__.__name__
 
@@ -603,6 +637,7 @@ class Pawn(ChessPiece):
         self._already_moved = True
 
     def get_end_row(self) -> int:
+        """Get the 'end' row of the pawn. This is the row at the opposite side of the board"""
 
         return self._end_row
 
@@ -670,28 +705,8 @@ def main():
     print(board.get_game_state())
 
 
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()
 
 
-import pygame
 
-pygame.init()
-width, height = 800, 600
-window = pygame.display.set_mode((width, height))
-pygame.display.set_caption('My Pygame')
-print(pygame.event.get())
-
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-    # Update game state and logic here
-    pygame.draw.rect(window, (255, 0, 0), (50, 50, 100, 100))
-    # Draw/Render the screen
-    pygame.display.flip()
-
-# Quit Pygame when the game loop is exited
-pygame.quit()
