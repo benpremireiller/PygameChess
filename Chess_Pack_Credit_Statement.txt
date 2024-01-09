@@ -1,0 +1,6 @@
+Title: SVG chess pieces
+Creator: Cburnett
+Copyright Notice: © [Year] [Name of the Creator]. All rights reserved.
+License Notice: This chess pack is licensed under the Creative Commons CC0 license. View the license at https://creativecommons.org/publicdomain/zero/1.0/.
+Disclaimer Notice: This chess pack is provided "as is," without warranty of any kind, express or implied. The creators and contributors are not liable for any damages or losses arising from the use of this material.
+Link to the Material: https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces

@@ -1,6 +1,9 @@
 import re
 import pygame
 
+square_size = 80
+outer_margin = int(square_size/2)
+
 
 class ChessBoard:
     """
@@ -24,20 +27,19 @@ class ChessBoard:
         ]
 
         test_board = [
-            [Rook('black'), Knight('black'), Bishop('black'), Queen('black'), King('black'), Bishop('black'), Knight('black'),
-             Rook('black')],
-            [None, Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black')],
+            [Rook('black'), Knight('black'), Bishop('black'), None, King('black'), Bishop('black'), Knight('black'), Rook('black')],
+            [None, Pawn('black'), None, None, None, Pawn('black'), Pawn('black'), Pawn('black')],
             [None, None, None, None, None, None, None, None],
-            [None, None, None, None, None, None, None, None],
+            [None, None, None, None, Queen('black'), None, None, None],
             [Pawn('black'), None, None, None, None, None, None, None],
             [None, None, None, None, None, None, None, None],
             [Pawn('white'), Pawn('white'), Pawn('white'), Pawn('white'), Pawn('white'), Pawn('white'), Pawn('white'), Pawn('white')],
-            [Rook('white'), None, None, None, King('white'), None, None,
-             Rook('white')]
+            [Rook('white'), None, None, None, King('white'), None, None, Rook('white')]
         ]
 
         self._chess_board = official_board
-        self._update_piece_positions()
+        self._piece_sprites = pygame.sprite.Group()
+        self._add_sprites_and_piece_positions()
         self._colors = {'white', 'black'}
 
         self._column_map = {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7}  # Map col letters to list indices
@@ -50,13 +52,18 @@ class ChessBoard:
             'captured_piece': [None]
         }
 
-    def _update_piece_positions(self):
-        """Add the positions to the piece objects"""
+    def _add_sprites_and_piece_positions(self):
+        """Add the positions to the piece objects and add the piece to the sprite group"""
 
         for i, row in enumerate(self._chess_board):
             for j, cell in enumerate(row):
                 if cell is not None:
                     cell.update_position((i, j))
+                    self._piece_sprites.add(cell)
+
+    def get_piece_sprites(self):
+
+        return self._piece_sprites
 
     def get_board(self):
         """Return the chess board"""
@@ -134,12 +141,18 @@ class ChessBoard:
                     print(cell.get_visual(), end=' ')
             print()
 
-    def add_queen_at_position(self, row: int, col: int, color: str) -> None:
+    def queen_piece(self, piece) -> None:
         """Add a queen of the color passed at the position passed to the board list"""
+
+        color = piece.get_color()
+        row, col = piece.get_position()
 
         queen = Queen(color)
         self._chess_board[row][col] = queen
         queen.update_position((row, col))
+
+        self._piece_sprites.remove(piece)
+        self._piece_sprites.add(queen)
 
     def update_board_positions(self, moving_piece, to_move: list) -> None:
         """
@@ -148,7 +161,6 @@ class ChessBoard:
         should move to and the position which the opponent piece should be removed from, respectively.
         """
 
-        moving_color = moving_piece.get_color()
         from_position = moving_piece.get_position()
 
         # Unpack to_move data
@@ -165,6 +177,7 @@ class ChessBoard:
             remove_row, remove_col = remove_position
             remove_piece = self._chess_board[remove_row][remove_col]
             self._chess_board[remove_row][remove_col] = None
+            self._piece_sprites.remove(remove_piece)
 
         # Move the piece to the new position
         self._chess_board[from_row][from_col] = None
@@ -174,14 +187,14 @@ class ChessBoard:
 
         # Check for queening piece
         if isinstance(moving_piece, Pawn) and moving_piece.get_end_row() == to_row:  # Pawn has reached the end
-            self.add_queen_at_position(to_row, to_col, moving_color)
+            self.queen_piece(moving_piece)
 
         # Convert to lists incase we need to add a move (for knighting)
         from_position, to_position, from_piece = [from_position], [to_position], [moving_piece]
 
         # Check if the move is a castling move
         col_distance = to_col - from_col
-        if isinstance(from_piece[0], King) and abs(col_distance) > 1:  # Kings will only move at least two spaces if castling
+        if isinstance(from_piece[0], King) and abs(col_distance) > 1:  # Kings will only move more than one space if castling
 
             # Get the rooks from and to positions
             orientation = (col_distance > 0) - (col_distance < 0)  # 1 is right, -1 is left
@@ -213,36 +226,46 @@ class ChessBoard:
 
         moves_from, moves_to, moving_pieces, captured_piece = self._last_move.values()
 
-        # Loop through the piece moves in the last move
+        # Loop through the piece moves in the last move. This will always loop once unless the move is a castle.
         for move_from, move_to, moving_piece in zip(moves_from, moves_to, moving_pieces):
             from_row, from_col = move_from
             to_row, to_col = move_to
 
             # Move the pieces back to their move_from positions on the board and the position dict
             self._chess_board[from_row][from_col] = self._chess_board[to_row][to_col]
-            self._chess_board[to_row][to_col] = captured_piece  # This will be None if the move wasn't a capture
+            self._chess_board[to_row][to_col] = None
             moving_piece.update_position(move_from)
 
+        if captured_piece: # Captures can only have one piece moving
+            to_row, to_col = moves_to[0]
+            self._chess_board[to_row][to_col] = captured_piece
+            self._piece_sprites.add(captured_piece)
 
-class ChessPiece:
+
+class ChessPiece(pygame.sprite.Sprite):
     """
     Represents a chess piece in a game of chess.
     There are 6 distinct pieces: Pawn, Knight, Rook, Bishop, Queen and King
     """
 
     def __init__(self, color: str):
+
+        super().__init__()
         self._color = color  # white or black
         self._visual = ''  # A placeholder for the letter which will represent a piece (for printing the board to the console)
         self._already_moved = False  # If the piece has already moved
         self._max_allowed_distance = 0  # How far a piece is allowed to go at most
         self._allowed_move_orientations = [] # Which directions the piece is allowed to move
-        self._image = None # The image which represents the piece
-        self._position = (0, 0) # Position on the board (row, col)
+        self._position = (0, 0)  # Position on the board (row, col)
+        self.image = None # The image which represents the piece
+        self.rect = pygame.Rect((0, 0, square_size, square_size))
 
-    def update_position(self, position) -> None:
+    def update_position(self, position: tuple) -> None:
         """Update the position variable"""
 
         self._position = position
+        self.rect.y = self._position[0] * square_size + outer_margin
+        self.rect.x = self._position[1] * square_size + outer_margin
 
     def get_available_moves(self, board: ChessBoard) -> tuple:
         """
@@ -328,7 +351,7 @@ class ChessPiece:
     def get_image(self) -> pygame.image:
         """Return the pygame image"""
 
-        return self._image
+        return self.image
 
     def get_class_name(self) -> str:
         """Get the name of the class"""
@@ -338,7 +361,7 @@ class ChessPiece:
     def __str__(self):
         """Override the string dunder method to print a user-friendly output"""
 
-        return self._color + ' ' + self.__class__.__name__
+        return self._color + ' ' + self.__class__.__name__ + ' id: ' + str(id(self))
 
 
 class Pawn(ChessPiece):
@@ -348,7 +371,7 @@ class Pawn(ChessPiece):
         super().__init__(color)
         self._max_allowed_distance = 2
         self._visual = 'p'
-        self._image = pygame.image.load('chess_sprites/' + color + '_pawn.png')
+        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_pawn.png'), (square_size, square_size))
 
         if color == 'white':
             self._allowed_move_orientations = [[-1, 0]]
@@ -376,7 +399,9 @@ class Pawn(ChessPiece):
             forward_position = (from_row + (dist * direction), from_col)
             forward_cell = board.get_cell_at_position(forward_position)
 
-            if forward_cell is None:
+            if forward_cell is not None:
+                break # Stop if there is a piece in front
+            else:
                 move_to_positions.append(forward_position)
                 remove_from_positions.append(None)
             dist += 1
@@ -434,7 +459,7 @@ class Bishop(ChessPiece):
         self._visual = 'b'
         self._max_allowed_distance = 8
         self._allowed_move_orientations = [[1, 1], [1, -1], [-1, 1], [-1, -1]]
-        self._image = pygame.image.load('chess_sprites/' + color + '_bishop.png')
+        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_bishop.png'), (square_size, square_size))
 
 
 class Rook(ChessPiece):
@@ -445,7 +470,7 @@ class Rook(ChessPiece):
         self._visual = 'r'
         self._max_allowed_distance = 8
         self._allowed_move_orientations = [[1, 0], [0, 1], [-1, 0], [0, -1]]
-        self._image = pygame.image.load('chess_sprites/' + color + '_rook.png')
+        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_rook.png'), (square_size, square_size))
 
 
 class Knight(ChessPiece):
@@ -454,7 +479,7 @@ class Knight(ChessPiece):
     def __init__(self, color: str):
         super().__init__(color)
         self._visual = 'h'
-        self._image = pygame.image.load('chess_sprites/' + color + '_knight.png')
+        self.image = pygame.image.load('chess_sprites/' + color + '_knight.png')
 
     def get_available_moves(self, board: ChessBoard) -> tuple:
         """Knights move differently than the 'default' piece. They move in an L shape"""
@@ -500,7 +525,7 @@ class Queen(ChessPiece):
         self._visual = 'q'
         self._max_allowed_distance = 8
         self._allowed_move_orientations = [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [0, 1], [-1, 0], [0, -1]]
-        self._image = pygame.image.load('chess_sprites/' + color + '_queen.png')
+        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_queen.png'), (square_size, square_size))
 
 
 class King(ChessPiece):
@@ -511,7 +536,7 @@ class King(ChessPiece):
         self._visual = 'k'
         self._max_allowed_distance = 1
         self._allowed_move_orientations = [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [0, 1], [-1, 0], [0, -1]]
-        self._image = pygame.image.load('chess_sprites/' + color + '_king.png')
+        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_king.png'), (square_size, square_size))
 
     def get_available_moves(self, board: ChessBoard) -> tuple:
         """Add castling to the kings available move set"""
@@ -521,40 +546,43 @@ class King(ChessPiece):
         # Use the logic for the standard piece
         move_to_positions, remove_from_positions = super().get_available_moves(board)
 
-        # Then add castling
-        rook_positions = board.get_piece_positions(self._color, 'Rook')
+        # Check if the king has already moved
+        if not self._already_moved:
 
-        # Check if the rook can castle
-        for rook_position in rook_positions:
+            # If not, add castling
+            rook_positions = board.get_piece_positions(self._color, 'Rook')
 
-            rook_piece = board.get_cell_at_position(rook_position)
+            # Check if the rook can castle
+            for rook_position in rook_positions:
 
-            # If the rook has already moved, castling in not legal
-            if rook_piece.get_already_moved():
-                continue
+                rook_piece = board.get_cell_at_position(rook_position)
 
-            rook_row, rook_col = rook_position
-            col_difference = rook_col - from_col
+                # If the rook has already moved, castling in not legal
+                if rook_piece.get_already_moved():
+                    continue
 
-            # Get orientation to determine queen side or king side castling
-            orientation = (col_difference > 0) - (col_difference < 0)  # -1 is left (queen side), 1 is right (king side)
+                rook_row, rook_col = rook_position
+                col_difference = rook_col - from_col
 
-            # Check if the path is clear between the king and rook
-            path_is_clear = True
-            offset = 1
-            while offset < abs(col_difference):
-                offset_position = (from_row, from_col + (offset * orientation))
-                cell = board.get_cell_at_position(offset_position)
-                if cell is not None:
-                    path_is_clear = False
-                    break
-                offset += 1
+                # Get orientation to determine queen side or king side castling
+                orientation = (col_difference > 0) - (col_difference < 0)  # -1 is left (queen side), 1 is right (king side)
 
-            # If the path is clear, the king hasn't moved and the rook hasn't moved, castling is legal
-            if path_is_clear:
-                king_move_to_position = (from_row, from_col + ((offset - 1) * orientation))
-                move_to_positions.append(king_move_to_position)
-                remove_from_positions.append(None)
+                # Check if the path is clear between the king and rook
+                path_is_clear = True
+                offset = 1
+                while offset < abs(col_difference):
+                    offset_position = (from_row, from_col + (offset * orientation))
+                    cell = board.get_cell_at_position(offset_position)
+                    if cell is not None:
+                        path_is_clear = False
+                        break
+                    offset += 1
+
+                # If the path is clear, the king hasn't moved and the rook hasn't moved, castling is legal
+                if path_is_clear:
+                    king_move_to_position = (from_row, from_col + ((offset - 1) * orientation))
+                    move_to_positions.append(king_move_to_position)
+                    remove_from_positions.append(None)
 
         return move_to_positions, remove_from_positions
 
@@ -577,10 +605,19 @@ class ChessGame:
 
         self._game_state = 'UNFINISHED'
 
+    def get_board_object(self):
+        """Return the ChessBoard object"""
+
+        return self._board
+
     def get_game_state(self):
         """Return the game state"""
 
         return self._game_state
+
+    def get_active_player(self):
+
+        return self._active_player
 
     def end_game(self):
         """
@@ -598,11 +635,11 @@ class ChessGame:
         """
 
         row_index = 8 - int(move[1])  # 8 minus because the board is reversed
-        col_index = self._board.get_column_map()[move[0]]
+        col_index = self._board.get_column_map()[move[0].lower()]
 
         return row_index, col_index,
 
-    def make_move(self, move_from: str, move_to: str) -> bool:
+    def make_move(self, move_from: str, move_to: str, numeric=False) -> bool:
         """
         Make a move in the following format: move_from('a3', 'a2')
         This method verifies the ongoing status of the game. If the game is still active, it proceeds to validate the proposed move.
@@ -626,7 +663,6 @@ class ChessGame:
         to_position = self.decode_player_input(move_to)
 
         # Get the cells at the coordinates
-
         from_cell = self._board.get_cell_at_position(from_position)
 
         if from_cell is None:  # No piece
@@ -748,8 +784,8 @@ def main():
     print('Make moves in the following format "a2a3"')
 
     while game.get_game_state() == 'UNFINISHED':
-        game._board.print_board()
-        turn = game._active_player
+        game.get_board_object().print_board()
+        turn = game.get_active_player()
         print(f'{turn}, make your move')
         move = input()
         game.make_move(move[:2], move[2:])
