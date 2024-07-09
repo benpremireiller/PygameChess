@@ -1,19 +1,13 @@
 from ChessGame import ChessGame
 import pygame
 import time
+from Parameters import square_size, outer_margin, board_size
 
 pygame.init()
 
 # Create a chess game
 game = ChessGame()
 chess_board = game.get_board_object()
-
-# This variable scales the window
-square_size = 80
-
-# Board size
-outer_margin = int(square_size/2)
-board_size = square_size * 8 + (2 * outer_margin)
 
 width, height = board_size, board_size
 window = pygame.display.set_mode((width, height))

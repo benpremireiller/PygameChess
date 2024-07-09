@@ -1,9 +1,30 @@
 import re
 import pygame
+from Parameters import square_size, outer_margin
 
-square_size = 80
-outer_margin = int(square_size/2)
+class ChessMoves:
+    """
+    Stores the list of moves made in the chess game
+    """
 
+    def __init__(self):
+        self._current_move = 0
+        self._moves = [] # format is (number, color, move_type, move_from, move_to, remove_from)
+
+    def get_last_move(self):
+        """Return the last move"""
+        return self._moves[self._current_move]
+
+    def get_all_moves(self):
+        """Return all the moves"""
+        return self._moves
+
+    def add_move(self, move):
+        """Add a move to the move list"""
+        self._current_move += 1
+        color, move_type, move_from, move_to, remove_from = move
+        full_move = (self._current_move, color, move_type, move_from, move_to, remove_from)
+        self._moves.append(full_move)
 
 class ChessBoard:
     """
@@ -44,7 +65,7 @@ class ChessBoard:
 
         self._column_map = {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7}  # Map col letters to list indices
 
-        # Define the last move dict. This is used to revert test and invalid moves. Maybe expand this to store all moves.
+        # Define the last move dict. This is used to revert test and invalid moves.
         self._last_move = {
             'move_from': [None],
             'move_to': [None],
@@ -237,7 +258,7 @@ class ChessBoard:
             moving_piece.update_position(move_from)
 
         if captured_piece: # Captures can only have one piece moving
-            to_row, to_col = moves_to[0]
+            to_row, to_col = moves_to[0] # Only move
             self._chess_board[to_row][to_col] = captured_piece
             self._piece_sprites.add(captured_piece)
 
@@ -258,7 +279,7 @@ class ChessPiece(pygame.sprite.Sprite):
         self._allowed_move_orientations = [] # Which directions the piece is allowed to move
         self._position = (0, 0)  # Position on the board (row, col)
         self.image = None # The image which represents the piece
-        self.rect = pygame.Rect((0, 0, square_size, square_size))
+        self.rect = pygame.Rect((0, 0, square_size, square_size)) # The pygame rect object used to represent piece
 
     def update_position(self, position: tuple) -> None:
         """Update the position variable"""
@@ -710,7 +731,7 @@ class ChessGame:
         self._active_player, self._opponent_player = self._opponent_player, self._active_player
 
     def check_for_check(self, color: str) -> bool:
-        """Return if the kings position is in the set of available moves of the 'color' opponent's pieces"""
+        """Return if the kings position is in the set of available moves of the opponent's pieces"""
 
         # Get the 'color' player
         players_king_position, = self._board.get_piece_positions(color, 'King')  # Only one value will be returned so unpack
