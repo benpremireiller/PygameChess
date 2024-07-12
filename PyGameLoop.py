@@ -63,7 +63,7 @@ def draw_background():
 
 
 def draw_sprites():
-    all_chess_piece_sprites = chess_board.get_piece_sprites()
+    all_chess_piece_sprites = game.get_piece_sprites()
     all_chess_piece_sprites.draw(window)
 
 

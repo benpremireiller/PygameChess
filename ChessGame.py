@@ -2,29 +2,55 @@ import re
 import pygame
 from Parameters import square_size, outer_margin
 
-class ChessMoves:
+
+class ChessMove:
     """
-    Stores the list of moves made in the chess game
+    Represents a chess move.
     """
 
-    def __init__(self):
-        self._current_move = 0
-        self._moves = [] # format is (number, color, move_type, move_from, move_to, remove_from)
+    def __init__(self, color, type, move_piece, remove_piece, move_from, move_to, remove_from):
+        """
+        :param color: The color of the player moving
+        :param type: The type of move (move, capture, castle-queen-side, castle-king-side, en-passant)
+        :param move_piece: The piece that is moving
+        :param remove_piece: The piece that is being removed. None if the move doesn't result in a capture.
+        :param move_from: The origin coordinates of the moving piece
+        :param move_to: The destination coordinates of the moving piece
+        :param remove_from: The coordinates of the piece being removed. None if move is not capture.
+        """
+        self.color = color
+        self.type = type
+        self.move_piece = move_piece
+        self.remove_piece = remove_piece
+        self.move_from = move_from
+        self.move_to = move_to
+        self.remove_from = remove_from
 
-    def get_last_move(self):
-        """Return the last move"""
-        return self._moves[self._current_move]
+    def get_color(self):
+        return self.color
 
-    def get_all_moves(self):
-        """Return all the moves"""
-        return self._moves
+    def get_type(self):
+        return self.type
 
-    def add_move(self, move):
-        """Add a move to the move list"""
-        self._current_move += 1
-        color, move_type, move_from, move_to, remove_from = move
-        full_move = (self._current_move, color, move_type, move_from, move_to, remove_from)
-        self._moves.append(full_move)
+    def get_move_piece(self):
+        return self.move_piece
+
+    def get_remove_piece(self):
+        return self.remove_piece
+
+    def get_move_from(self):
+        return self.move_from
+
+    def get_move_to(self):
+        return self.move_to
+
+    def get_remove_from(self):
+        return self.remove_from
+
+    def get_move(self):
+        """Return the move tuple"""
+        return (self.color, self.type, self.move_piece, self.remove_piece, self.move_from, self.move_to, self.remove_from)
+
 
 class ChessBoard:
     """
@@ -36,7 +62,7 @@ class ChessBoard:
     def __init__(self):
 
         # Define the boards
-        official_board = [
+        main_board = [
             [Rook('black'), Knight('black'), Bishop('black'), Queen('black'), King('black'), Bishop('black'), Knight('black'), Rook('black')],
             [Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black'), Pawn('black')],
             [None, None, None, None, None, None, None, None],
@@ -58,33 +84,9 @@ class ChessBoard:
             [Rook('white'), None, None, None, King('white'), None, None, Rook('white')]
         ]
 
-        self._chess_board = official_board
-        self._piece_sprites = pygame.sprite.Group()
-        self._add_sprites_and_piece_positions()
-        self._colors = {'white', 'black'}
-
+        self._chess_board = main_board
         self._column_map = {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7}  # Map col letters to list indices
-
-        # Define the last move dict. This is used to revert test and invalid moves.
-        self._last_move = {
-            'move_from': [None],
-            'move_to': [None],
-            'moving_piece': [None],
-            'captured_piece': [None]
-        }
-
-    def _add_sprites_and_piece_positions(self):
-        """Add the positions to the piece objects and add the piece to the sprite group"""
-
-        for i, row in enumerate(self._chess_board):
-            for j, cell in enumerate(row):
-                if cell is not None:
-                    cell.update_position((i, j))
-                    self._piece_sprites.add(cell)
-
-    def get_piece_sprites(self):
-
-        return self._piece_sprites
+        
 
     def get_board(self):
         """Return the chess board"""
@@ -102,11 +104,6 @@ class ChessBoard:
 
         return self._column_map
 
-    def get_last_move(self):
-        """Returns a dict of the last move"""
-
-        return self._last_move
-
     def get_piece_positions(self, color: str, piece_name=None) -> list:
         """
         Return the positions of the pieces for the passed color
@@ -122,6 +119,7 @@ class ChessBoard:
 
         return positions
 
+
     def position_is_on_board(self, position: tuple) -> bool:
         """
         Static helper method which returns True if the position passed is on the board.
@@ -132,18 +130,9 @@ class ChessBoard:
 
         return 0 <= row <= 7 and 0 <= col <= 7
 
-    def get_other_color(self, color):
-        """
-        Return the 'other' color
-        If the color argument is 'black', return 'white'
-        If the color argument is 'white', return 'black'
-        """
-
-        return list(self._colors - {color})[0]  # Set difference operation
-
     def print_board(self) -> None:
         """
-        Prints the board in a user-friendly format with row and column headers
+        Prints the board with row and column headers to the console
         """
 
         # Print columns first
@@ -162,105 +151,65 @@ class ChessBoard:
                     print(cell.get_visual(), end=' ')
             print()
 
-    def queen_piece(self, piece) -> None:
-        """Add a queen of the color passed at the position passed to the board list"""
+    def add_piece_at_position(self, piece, position) -> None:
+        """Add a piece at the passed position"""
 
-        color = piece.get_color()
-        row, col = piece.get_position()
+        row, col = position
 
-        queen = Queen(color)
-        self._chess_board[row][col] = queen
-        queen.update_position((row, col))
+        self._chess_board[row][col] = piece
+        piece.update_position((row, col))
 
-        self._piece_sprites.remove(piece)
-        self._piece_sprites.add(queen)
 
-    def update_board_positions(self, moving_piece, to_move: list) -> None:
+    def update_board_positions(self, move_object: ChessMove) -> None:
         """
         Move the piece at the from_position by using the data in the to_move
         The to_move argument contains a list with a to_position and a remove_position which indicate the position the piece
         should move to and the position which the opponent piece should be removed from, respectively.
+
         """
-
-        from_position = moving_piece.get_position()
-
-        # Unpack to_move data
-        to_position, remove_position = to_move
+        color, move_type, moving_piece, remove_piece, from_position, to_position, remove_position = move_object.get_move()
 
         # Get the moving coordinates
         from_row, from_col = from_position
         to_row, to_col = to_position
 
-        remove_piece = None
-
-        # Remove the opponent piece from the board and dict if the move is a capture
-        if remove_position is not None:
-            remove_row, remove_col = remove_position
-            remove_piece = self._chess_board[remove_row][remove_col]
-            self._chess_board[remove_row][remove_col] = None
-            self._piece_sprites.remove(remove_piece)
-
         # Move the piece to the new position
         self._chess_board[from_row][from_col] = None
         self._chess_board[to_row][to_col] = moving_piece
-
         moving_piece.update_position(to_position)
 
         # Check for queening piece
         if isinstance(moving_piece, Pawn) and moving_piece.get_end_row() == to_row:  # Pawn has reached the end
-            self.queen_piece(moving_piece)
+            queen = Queen(color)
+            self.add_piece_at_position(queen, to_position)
 
-        # Convert to lists incase we need to add a move (for knighting)
-        from_position, to_position, from_piece = [from_position], [to_position], [moving_piece]
+        # Apply logic based on move type
+        if move_type == 'move':
+            return # Nothing else to do
 
-        # Check if the move is a castling move
-        col_distance = to_col - from_col
-        if isinstance(from_piece[0], King) and abs(col_distance) > 1:  # Kings will only move more than one space if castling
+        elif move_type == 'capture' or move_type == 'en-passant': # Need to remove a piece
+            remove_row, remove_col = remove_position
+            self._chess_board[remove_row][remove_col] = None
+            remove_piece.update_position(None)
+            # self._piece_sprites.remove(remove_piece) TODO move somewhere else
 
-            # Get the rooks from and to positions
-            orientation = (col_distance > 0) - (col_distance < 0)  # 1 is right, -1 is left
-            rook_col = 7 if orientation == 1 else 0  # If king moving right, then rook at far right (col index 7) and vice versa
+        elif move_type == 'castle-king-side' or move_type == 'castle-queen-side':
 
+            # Get the direction the king is moving
+            orientation = -1 if move_type == 'castle-queen-side' else 1
+            rook_col = 0 if move_type == 'castle-queen-side' else 7
+
+            # Form the rook move
             rook_from_position = (from_row, rook_col)
             rook_to_position = (from_row, to_col - orientation)  # Right before or after the king col
-            rook_move = (rook_to_position, None)
             rook_piece = self._chess_board[from_row][rook_col]
+            rook_move = ChessMove(color, 'move', rook_piece, None, rook_from_position, rook_to_position, None)
 
             # Recurse this method to move the rook
-            self.update_board_positions(rook_piece, rook_move)
+            self.update_board_positions(rook_move)
 
-            # Append the rook move to the lists we will use to update the last move
-            from_position.append(rook_from_position)
-            to_position.append(rook_to_position)
-            from_piece.append(rook_piece)
-
-        # Set the last move
-        self._last_move = {
-            'move_from': from_position,
-            'move_to': to_position,
-            'moving_piece': from_piece,
-            'captured_piece': remove_piece
-        }
-
-    def revert_last_move(self) -> None:
-        """Revert the board list and position dict to their state right before the last move that occurred"""
-
-        moves_from, moves_to, moving_pieces, captured_piece = self._last_move.values()
-
-        # Loop through the piece moves in the last move. This will always loop once unless the move is a castle.
-        for move_from, move_to, moving_piece in zip(moves_from, moves_to, moving_pieces):
-            from_row, from_col = move_from
-            to_row, to_col = move_to
-
-            # Move the pieces back to their move_from positions on the board and the position dict
-            self._chess_board[from_row][from_col] = self._chess_board[to_row][to_col]
-            self._chess_board[to_row][to_col] = None
-            moving_piece.update_position(move_from)
-
-        if captured_piece: # Captures can only have one piece moving
-            to_row, to_col = moves_to[0] # Only move
-            self._chess_board[to_row][to_col] = captured_piece
-            self._piece_sprites.add(captured_piece)
+        else:
+            raise('Not a valid move type')
 
 
 class ChessPiece(pygame.sprite.Sprite):
@@ -272,6 +221,7 @@ class ChessPiece(pygame.sprite.Sprite):
     def __init__(self, color: str):
 
         super().__init__()
+        self._game = None # This will hold the game ChessGame object
         self._color = color  # white or black
         self._visual = ''  # A placeholder for the letter which will represent a piece (for printing the board to the console)
         self._already_moved = False  # If the piece has already moved
@@ -281,6 +231,11 @@ class ChessPiece(pygame.sprite.Sprite):
         self.image = None # The image which represents the piece
         self.rect = pygame.Rect((0, 0, square_size, square_size)) # The pygame rect object used to represent piece
 
+    def set_game(self, game):
+        """Set the game variable. Should only be called once at the beginning of the game init."""
+
+        self._game = game
+
     def update_position(self, position: tuple) -> None:
         """Update the position variable"""
 
@@ -288,22 +243,19 @@ class ChessPiece(pygame.sprite.Sprite):
         self.rect.y = self._position[0] * square_size + outer_margin
         self.rect.x = self._position[1] * square_size + outer_margin
 
-    def get_available_moves(self, board: ChessBoard) -> tuple:
+    def get_available_moves(self) -> list:
         """
         Get the available moves for a particular piece on the board.
-        This method will fetch the available moves for this piece based on its allowed movement rules
+        This method will fetch the available moves for this piece based on its allowed movement rules.
 
-        Returns a tuple with two elements. The first element is a list of legal 'move to' positions and the
-        second element is a list of 'remove from' positions which correspond to the positions we need to remove opponent
-        pieces from for each 'move to' move. The reason we need a remove from position is it may differ from
-        the move_to_positions for en passant captures (pawns). If the move is not a capture, the 'remove from' value will be None.
+        Returns a list of ChessMoves.
 
         The default rules for a piece are that it can move in straight lines.
         """
 
-        move_to_positions = []
-        remove_from_positions = []
-        opponent_color = board.get_other_color(self._color)
+        moves = []
+        board = self._game.get_board_object()
+        opponent_color = board.get_opponent_color(self._color)
 
         from_row, from_col = self._position
 
@@ -319,19 +271,21 @@ class ChessPiece(pygame.sprite.Sprite):
             # Loop until we reach the pieces max allowed distance or the position is not on the board anymore
             while dist <= self._max_allowed_distance and position_offset_on_board:
 
-                cell_is_players_piece = position_offset in board.get_piece_positions(self._color)
+                cell_at_position = board.get_cell_at_position(position_offset)
+
+                cell_is_players_piece = cell_at_position is not None and cell_at_position.get_color() == self._color
                 if cell_is_players_piece:
                     break  # Stop looping as we've hit a 'wall'
 
-                cell_is_opponent_piece = position_offset in board.get_piece_positions(opponent_color)
+                cell_is_opponent_piece = cell_at_position is not None and cell_at_position.get_color() != self._color
                 if cell_is_opponent_piece:
-                    move_to_positions.append(position_offset)
-                    remove_from_positions.append(position_offset)
+                    move = ChessMove(self._color, 'capture', self, cell_at_position, self._position, position_offset, position_offset)
+                    moves.append(move)
                     break  # Hit a wall again (that we can capture)
 
                 # If we've reached here, the cell is empty
-                move_to_positions.append(position_offset)
-                remove_from_positions.append(None)
+                move = ChessMove(self._color, 'move', self, None, self._position, position_offset, None)
+                moves.append(move)
 
                 dist += 1
 
@@ -339,7 +293,7 @@ class ChessPiece(pygame.sprite.Sprite):
                 position_offset = (from_row + (vertical_direction * dist), from_col + (horizontal_direction * dist))
                 position_offset_on_board = board.position_is_on_board(position_offset)
 
-        return move_to_positions, remove_from_positions
+        return moves
 
     def get_already_moved(self) -> bool:
         """Return if the piece has already moved"""
@@ -401,15 +355,15 @@ class Pawn(ChessPiece):
             self._allowed_move_orientations = [[1, 0]]
             self._end_row = 7
 
-    def get_available_moves(self, board: ChessBoard) -> tuple:
+    def get_available_moves(self) -> list:
         """
         Pawns move differently than the 'default' chess piece. They move forward and capture diagonally.
-        They are also able to perform en passant moves
+        They are also able to perform en passant moves.
         """
 
-        move_to_positions = []
-        remove_from_positions = []
-        opponent_color = board.get_other_color(self._color)
+        moves = []
+        board = self._game.get_board_object()
+        opponent_color = board.get_opponent_color(self._color)
 
         direction = self._allowed_move_orientations[0][0]  # The vertical direction (1 or -1)
         from_row, from_col = self._position
@@ -423,8 +377,8 @@ class Pawn(ChessPiece):
             if forward_cell is not None:
                 break # Stop if there is a piece in front
             else:
-                move_to_positions.append(forward_position)
-                remove_from_positions.append(None)
+                move = ChessMove(self._color, 'move', self, None, self._position, forward_position, None)
+                moves.append(move)
             dist += 1
 
         # Get captures
@@ -432,30 +386,37 @@ class Pawn(ChessPiece):
 
             # Check if capture position has an opponent piece
             forward_diagonal_position = (from_row + direction, from_col + direct)
-            forward_cell_is_opponent = forward_diagonal_position in board.get_piece_positions(opponent_color)
+            cell_at_position = board.get_cell_at_position(forward_diagonal_position)
+            forward_cell_is_opponent = cell_at_position is not None and cell_at_position.get_color() == opponent_color
 
             if forward_cell_is_opponent:
-                move_to_positions.append(forward_diagonal_position)
-                remove_from_positions.append(forward_diagonal_position)
+                move = ChessMove(self._color, 'capture', self, cell_at_position, self._position, forward_diagonal_position, forward_diagonal_position)
+                moves.append(move)
 
         # Get en passant moves
-        last_move_from, last_move_to, last_moving_piece, _ = board.get_last_move().values()
-        last_move_from, last_move_to, last_moving_piece = last_move_from[0], last_move_to[0], last_moving_piece[0]
+        current_game_move = self._game.get_current_move()
+        last_move_object = self._game.get_last_move_object()
 
-        if not isinstance(last_moving_piece, Pawn):  # If a move hasn't been made yet or the piece that last moved isn't a pawn
-            return move_to_positions, remove_from_positions
+        last_moving_piece = last_move_object.get_move_piece()
+        last_move_from = last_move_object.get_move_from()
+        last_move_to = last_move_object.get_move_to()
 
-        last_to_row, last_to_col = last_move_to  # This variable will be a list of len 2 (for knighting) or 1 (all other moves)
+        # If a move hasn't been made yet or the piece that last moved isn't a pawn
+        if current_game_move == 1 or not isinstance(last_moving_piece, Pawn):
+            return moves # No en passant so return
+
+        last_to_row, last_to_col = last_move_to
         last_from_row, last_from_col = last_move_from
         vertical_distance_moved_is_two = abs(last_from_row - last_to_row) == 2
         pawn_is_adjacent = last_to_row == from_row and abs(last_to_col - from_col) == 1
 
-        if vertical_distance_moved_is_two and pawn_is_adjacent:
+        if vertical_distance_moved_is_two and pawn_is_adjacent: # Valid en passant
             move_coordinate = (from_row + direction, last_to_col)
-            move_to_positions.append(move_coordinate)
-            remove_from_positions.append(last_move_to)
+            move = ChessMove(self._color, 'en-passant', self, last_moving_piece, self._position, move_coordinate,
+                             last_move_to)
+            moves.append(move)
 
-        return move_to_positions, remove_from_positions
+        return moves
 
     def update_has_already_moved(self) -> None:
         """
@@ -502,29 +463,35 @@ class Knight(ChessPiece):
         self._visual = 'h'
         self.image = pygame.image.load('chess_sprites/' + color + '_knight.png')
 
-    def get_available_moves(self, board: ChessBoard) -> tuple:
+    def get_available_moves(self) -> tuple:
         """Knights move differently than the 'default' piece. They move in an L shape"""
 
-        move_to_positions = []
-        remove_from_positions = []
-        opponent_color = board.get_other_color(self._color)
+        moves = []
+        board = self._game.get_board_object()
+        opponent_color = board.get_opponent_color(self._color)
 
         from_row, from_col = self._position
 
         def add_knight_move(position_to_check: tuple) -> None:
             """Add valid moves based on what is present at the position_to_check"""
 
+            # Make sure the position is a valid one (since we are checking all L offsets)
             position_on_board = board.position_is_on_board(position_to_check)
-            position_not_players_piece = position_to_check not in board.get_piece_positions(self._color)
-            position_is_opponent_piece = position_to_check in board.get_piece_positions(opponent_color)
 
-            if position_on_board and position_is_opponent_piece:  # A capture
-                move_to_positions.append(position_to_check)
-                remove_from_positions.append(position_to_check)
+            if position_on_board:
 
-            elif position_on_board and position_not_players_piece:  # A move
-                move_to_positions.append(position_to_check)
-                remove_from_positions.append(None)
+                # Get the cell. If opponent, add a capture move, if empty add regular move.
+                cell_at_position = board.get_cell_at_position(position_to_check)
+                position_is_opponent = cell_at_position is not None and cell_at_position.get_color() == opponent_color
+                position_is_empty = cell_at_position is None
+
+                if position_is_opponent:  # A capture
+                    move = ChessMove(self._color, 'capture', self, cell_at_position, self._position, position_to_check, position_to_check)
+                    moves.append(move)
+
+                elif position_is_empty:  # A move
+                    move = ChessMove(self._color, 'move', self, None, self._position, position_to_check, None)
+                    moves.append(move)
 
         # Loop through all possible sets of moves for knights
         for i in [1, -1]:
@@ -535,7 +502,7 @@ class Knight(ChessPiece):
                 # Next check for moves that move two cells vertically then one cell horizontally
                 add_knight_move((from_row + j, from_col + i))
 
-        return move_to_positions, remove_from_positions
+        return moves
 
 
 class Queen(ChessPiece):
@@ -559,13 +526,14 @@ class King(ChessPiece):
         self._allowed_move_orientations = [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [0, 1], [-1, 0], [0, -1]]
         self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_king.png'), (square_size, square_size))
 
-    def get_available_moves(self, board: ChessBoard) -> tuple:
+    def get_available_moves(self) -> tuple:
         """Add castling to the kings available move set"""
 
+        board = self._game.get_board_object()
         from_row, from_col = self._position
 
         # Use the logic for the standard piece
-        move_to_positions, remove_from_positions = super().get_available_moves(board)
+        moves = super().get_available_moves(board)
 
         # Check if the king has already moved
         if not self._already_moved:
@@ -586,7 +554,8 @@ class King(ChessPiece):
                 col_difference = rook_col - from_col
 
                 # Get orientation to determine queen side or king side castling
-                orientation = (col_difference > 0) - (col_difference < 0)  # -1 is left (queen side), 1 is right (king side)
+                orientation = (col_difference > 0) - (col_difference < 0)
+                castle_type = 'queen-side' if orientation == -1 else 'king-side'
 
                 # Check if the path is clear between the king and rook
                 path_is_clear = True
@@ -602,39 +571,89 @@ class King(ChessPiece):
                 # If the path is clear, the king hasn't moved and the rook hasn't moved, castling is legal
                 if path_is_clear:
                     king_move_to_position = (from_row, from_col + ((offset - 1) * orientation))
-                    move_to_positions.append(king_move_to_position)
-                    remove_from_positions.append(None)
+                    move_type = 'castle-' + castle_type
+                    move = ChessMove(self._color, move_type, self, None, self._position, king_move_to_position, None)
+                    moves.append(move)
 
-        return move_to_positions, remove_from_positions
+        return moves
 
 
 class ChessGame:
     """
     Represents a game of chess:
-    The game is over once a king is put into check mate
+    The game is over once a king is put into check mate.
 
+    This class servces as the main controller for the game.
     Use the make_move() method to alter the state of the board
     """
 
     def __init__(self):
 
         self._board = ChessBoard()
-
-        # Keep track of turns
-        self._active_player = 'white'  # White starts
+        self._piece_sprites = pygame.sprite.Group()
+        self._initialize_piece_data()        # Update the piece objects
+        self._colors = {'white', 'black'}
+        self._active_player = 'white'       # White starts
         self._opponent_player = 'black'
+        self._current_move = 1              # The current move we are on
+        self._moves = []                    # Store the game moves
+        self._game_state = 'UNFINISHED'     
 
-        self._game_state = 'UNFINISHED'
+    def _initialize_piece_data(self):
+        """Add the game reference and positions to the piece objects. Also add the piece to the sprite group."""
 
-    def get_board_object(self):
-        """Return the ChessBoard object"""
+        for i, row in enumerate(self._board.get_board()):
+            for j, cell in enumerate(row):
+                if cell is not None:
+                    cell.set_game(self)
+                    cell.update_position((i, j))
+                    self._piece_sprites.add(cell)
+    
+    def _add_move(self, move_object):
+        """Add a move to the move list"""
 
-        return self._board
+        self._moves.append(move_object)
+        self._current_move += 1
 
+    def update_piece_sprites(self, move_object):
+
+       # TODO IDK
+        self._piece_sprites.remove(piece)
+        self._piece_sprites.add(queen)
+
+    def get_last_move_object(self):
+        """Return the last move"""
+
+        return self._moves[self._current_move]
+
+    def get_current_move(self):
+        """Return the current move number"""
+
+        return self._current_move
+
+    def get_opponent_color(self, color):
+        """
+        Return the 'other' color
+        If the color argument is 'black', return 'white'
+        If the color argument is 'white', return 'black'
+        """
+
+        return list(self._colors - {color})[0]  # Set difference operation
+
+    def get_piece_sprites(self):
+        """Return the list of piece sprites"""
+
+        return self._piece_sprites
+        
     def get_game_state(self):
         """Return the game state"""
 
         return self._game_state
+    
+    def get_board_object(self):
+        """Return the ChessBoard object"""
+
+        return self._board
 
     def get_active_player(self):
 
@@ -695,25 +714,30 @@ class ChessGame:
             return False
 
         # Check if the move is in the set of available moves for the piece
-        to_positions, remove_positions = from_cell.get_available_moves(self._board)
+        moves = from_cell.get_available_moves()
 
-        if to_position not in to_positions:
+        valid = False
+        for move in moves:
+            if to_position == move.get_move_to():
+                valid_move = move
+                valid = True
+
+        if not valid:
             print('Invalid move')
             return False
 
-        # Get the corresponding remove_from position for the associated move (needed for en passant moves)
-        remove_position = remove_positions[to_positions.index(to_position)]
-        move_to_data = (to_position, remove_position)
+        # Update board positions as move is valid
+        self._board.update_board_positions(valid_move)
 
-        # Check if the move results in the active player's king being in check
-        self._board.update_board_positions(from_cell, move_to_data)
+        # Update sprites object
+        self.update_piece_sprites(valid_move)
 
-        player_is_in_check = self.check_for_check(self._active_player)
+        player_is_in_check = self.check_for_check(self._active_player) # TODO move to get_available_moves
 
         # If the player is in check as a result of the move, it is invalid
         if player_is_in_check:
             print('Move results in King being in check')
-            self._board.revert_last_move()
+            self.revert_last_move()
             return False
 
         # Update that the piece has already moved
@@ -730,6 +754,22 @@ class ChessGame:
         # Update player turns
         self._active_player, self._opponent_player = self._opponent_player, self._active_player
 
+    def revert_last_move(self) -> None:
+        """Revert the board list and position dict to their state right before the last move that occurred"""
+
+        move_object = self.get_last_move_object()
+        color, move_type, moving_piece, remove_piece, from_position, to_position, remove_position = move_object.get_move()
+
+        # Invert the move and send it to update_board_positions
+        reversion_move = ChessMove(color, 'move', None, to_position, from_position, None)
+        self._board.update_board_positions(reversion_move)
+
+        # If the move resulted in a capture, add the piece back
+        if remove_piece:
+            self._board.add_piece_at_position(remove_piece, remove_position)
+
+        self._moves.pop()
+
     def check_for_check(self, color: str) -> bool:
         """Return if the kings position is in the set of available moves of the opponent's pieces"""
 
@@ -737,18 +777,21 @@ class ChessGame:
         players_king_position, = self._board.get_piece_positions(color, 'King')  # Only one value will be returned so unpack
 
         # Create a set we will fill with the opponents moves
-        opponent_color = self._board.get_other_color(color)
+        opponent_color = self.get_opponent_color(color)
         opponent_piece_positions = self._board.get_piece_positions(opponent_color)
 
         # Get the distinct set of moves that the opponent pieces can make
         for opponent_position in opponent_piece_positions:
 
             piece = self._board.get_cell_at_position(opponent_position)
-            to_positions, _ = piece.get_available_moves(self._board)
+            moves = piece.get_available_moves()
 
-            # If the players king position is in the set of available moves for any opponent piece, the king is in check
-            if players_king_position in to_positions:
-                return True
+            for move in moves:
+                to_position = move.get_move_to()
+
+                # If the players king position is in the set of available moves for any opponent piece, the king is in check
+                if players_king_position == to_position:
+                    return True
 
         # If we've reached here, the opponent does not have a move at the active player's king position
         return False
@@ -767,36 +810,31 @@ class ChessGame:
         if not king_in_check:
             return False
 
-        actual_last_move = self._board.get_last_move()
-
         # Get the opponent's piece positions then loop through them
-        opponent_piece_positions = list(self._board.get_piece_positions(self._opponent_player))
+        opponent_piece_positions = list(self._board.get_piece_positions(self._opponent_player)) # Copy
 
         for opponent_position in opponent_piece_positions:
 
             piece = self._board.get_cell_at_position(opponent_position)
 
             # Get the available moves for the piece
-            to_positions, remove_positions = piece.get_available_moves(self._board)
+            moves = piece.get_available_moves()
 
-            for move in zip(to_positions, remove_positions):
+            for move in moves:
 
                 # Update the board for the available 'test' move
-                self._board.update_board_positions(piece, move)
+                self._board.update_board_positions(move)
 
                 # Check if the king is in check
                 king_in_check = self.check_for_check(self._opponent_player)
 
                 # Revert the move since we were just testing
-                self._board.revert_last_move()
+                self.revert_last_move()
 
                 # If there is a single move which results in the king not being in check then it is not checkmate
                 if not king_in_check:
-                    self._board._last_move = actual_last_move
                     return False
 
-        # If we've reached here then the opponent has no moves to 'un-check' themselves and is thus mated
-        self._board._last_move = actual_last_move
         return True
 
 
