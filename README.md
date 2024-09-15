@@ -8,7 +8,7 @@ This project is a chess application built with Pygame, allowing users to play ch
 
 ## Features
 
-- Full chess game implementation
+- Full chess game implementation including castling, queening, and en-passants
 - Graphical user interface using Pygame
 - Ability to click on a piece and view available legal moves
 
@@ -40,7 +40,7 @@ Run the game using:
 python PyGameLoop.py
 ```
 
-Then play with point and click.
+Then point and click to play.
 
 ## Contributing
 
