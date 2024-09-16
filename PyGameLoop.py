@@ -1,19 +1,13 @@
 from ChessGame import ChessGame
 import pygame
 import time
+from Parameters import square_size, outer_margin, board_size
 
 pygame.init()
 
 # Create a chess game
 game = ChessGame()
 chess_board = game.get_board_object()
-
-# This variable scales the window
-square_size = 80
-
-# Board size
-outer_margin = int(square_size/2)
-board_size = square_size * 8 + (2 * outer_margin)
 
 width, height = board_size, board_size
 window = pygame.display.set_mode((width, height))
@@ -69,7 +63,7 @@ def draw_background():
 
 
 def draw_sprites():
-    all_chess_piece_sprites = chess_board.get_piece_sprites()
+    all_chess_piece_sprites = game.get_piece_sprites()
     all_chess_piece_sprites.draw(window)
 
 
@@ -103,12 +97,13 @@ while running:
 
             if not piece_clicked:
                 active_player = game.get_active_player()
-                for sprite in chess_board.get_piece_sprites():
+                for sprite in game.get_piece_sprites():
                     if sprite.rect.collidepoint(event.pos) and sprite.get_color() == active_player: # The players piece is clicked
                         piece_clicked = True
-                        moves, removes = sprite.get_available_moves(chess_board)
+                        moves = sprite.get_available_moves()
                         for move in moves:
-                            raw_move_top, raw_move_left = move
+                            move_to = move.get_move_to()
+                            raw_move_top, raw_move_left = move_to
                             move_left, move_top = get_offset_position(raw_move_left), get_offset_position(raw_move_top)
 
                             available_move_color = get_square_color(raw_move_top, raw_move_left)
@@ -121,23 +116,23 @@ while running:
 
             # Check for move to position if a piece is clicked
             else:
-                for move, remove in zip(moves, removes):
+                for move in moves:
 
+                    move_to = move.get_move_to()
                     # Get the move rect on the pygame board
-                    move_left, move_top = get_offset_position(move[1]), get_offset_position(move[0])
+                    move_left, move_top = get_offset_position(move_to[1]), get_offset_position(move_to[0])
                     move_rect = pygame.Rect((move_left, move_top, square_size, square_size))
 
                     # Redraw the background where the available move circle is
-                    background_square_color = get_square_color(*move)
+                    background_square_color = get_square_color(*move_to)
                     pygame.draw.rect(window, background_square_color, move_rect)
 
-                    # TODO, this is drawing over pieces if there is an available capture
-                    draw_sprites() # This works but is sloppy sort of
+                    draw_sprites()
 
                     if move_rect.collidepoint(event.pos):
 
                         # Convert the move into the string the game's make_move method takes
-                        y, x = move
+                        y, x = move_to
                         move_from_str = letter_list[sprite.get_position()[1]] + str(8-sprite.get_position()[0])
                         move_to_str = letter_list[x] + str(8-y)
 
