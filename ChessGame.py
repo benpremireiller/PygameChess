@@ -383,7 +383,7 @@ class Pawn(ChessPiece):
         super().__init__(color)
         self._max_allowed_distance = 2
         self._visual = 'p'
-        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_pawn.png'), (square_size, square_size))
+        self.image = pygame.transform.scale(pygame.image.load('Assets/chess_sprites/' + color + '_pawn.png'), (square_size, square_size))
 
         if color == 'white':
             self._allowed_move_orientations = [[-1, 0]]
@@ -505,7 +505,7 @@ class Bishop(ChessPiece):
         self._visual = 'b'
         self._max_allowed_distance = 8
         self._allowed_move_orientations = [[1, 1], [1, -1], [-1, 1], [-1, -1]]
-        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_bishop.png'), (square_size, square_size))
+        self.image = pygame.transform.scale(pygame.image.load('Assets/chess_sprites/' + color + '_bishop.png'), (square_size, square_size))
 
 
 class Rook(ChessPiece):
@@ -516,7 +516,7 @@ class Rook(ChessPiece):
         self._visual = 'r'
         self._max_allowed_distance = 8
         self._allowed_move_orientations = [[1, 0], [0, 1], [-1, 0], [0, -1]]
-        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_rook.png'), (square_size, square_size))
+        self.image = pygame.transform.scale(pygame.image.load('Assets/chess_sprites/' + color + '_rook.png'), (square_size, square_size))
 
 
 class Knight(ChessPiece):
@@ -525,7 +525,7 @@ class Knight(ChessPiece):
     def __init__(self, color: str):
         super().__init__(color)
         self._visual = 'h'
-        self.image = pygame.image.load('chess_sprites/' + color + '_knight.png')
+        self.image = pygame.image.load('Assets/chess_sprites/' + color + '_knight.png')
 
     def get_available_moves(self, check_for_checks=True) -> list:
         """Knights move differently than the 'default' piece. They move in an L shape"""
@@ -582,7 +582,7 @@ class Queen(ChessPiece):
         self._visual = 'q'
         self._max_allowed_distance = 8
         self._allowed_move_orientations = [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [0, 1], [-1, 0], [0, -1]]
-        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_queen.png'), (square_size, square_size))
+        self.image = pygame.transform.scale(pygame.image.load('Assets/chess_sprites/' + color + '_queen.png'), (square_size, square_size))
 
 
 class King(ChessPiece):
@@ -593,7 +593,7 @@ class King(ChessPiece):
         self._visual = 'k'
         self._max_allowed_distance = 1
         self._allowed_move_orientations = [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [0, 1], [-1, 0], [0, -1]]
-        self.image = pygame.transform.scale(pygame.image.load('chess_sprites/' + color + '_king.png'), (square_size, square_size))
+        self.image = pygame.transform.scale(pygame.image.load('Assets/chess_sprites/' + color + '_king.png'), (square_size, square_size))
 
     def get_available_moves(self, check_for_checks=True) -> list:
         """Kings have the same move set as the 'standard' piece but can also castle"""

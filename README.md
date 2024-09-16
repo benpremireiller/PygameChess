@@ -2,6 +2,7 @@
 
 A chess game implemented using Pygame.
 
+![Chess Game Screenshot](Assets/images/PyGameChess.PNG)
 ## Description
 
 This project is a chess application built with Pygame, allowing users to play chess with a graphical interface.
