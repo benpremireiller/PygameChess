@@ -52,4 +52,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 Benjamin Premi-Reiller
 
-Project Link: [https://github.com/yourusername/PygameChess](https://github.com/yourusername/PygameChess)
+Project Link: [https://github.com/benpremireiller/PygameChess](https://github.com/benpremireiller/PygameChess)
